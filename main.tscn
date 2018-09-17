@@ -1,0 +1,237 @@
+[gd_scene load_steps=2 format=2]
+
+[sub_resource type="GDScript" id=1]
+
+resource_name = "main"
+script/source = "extends Control
+
+
+onready var status : Label = $Status as Label
+
+var enable_server : bool = false
+
+var udp_handshake : bool = true
+
+
+func _ready():
+	if enable_server:
+		var server_port = int($Port.text)
+		var net = NetworkedMultiplayerENet.new()
+		net.create_server(server_port,2048)
+		get_tree().network_peer = net
+		
+		get_tree().connect(\"network_peer_connected\",self,\"_player_connected\")
+		$Connect.disabled = true
+
+func _on_Connect_pressed():
+	var server_ip = $IP.text
+	var server_port = int($Port.text)
+	var net = NetworkedMultiplayerENet.new()
+	net.create_client(server_ip,server_port)
+	get_tree().network_peer = net
+	
+	get_tree().connect(\"connected_to_server\",self,\"_connected_to_server\")
+	get_tree().connect(\"connection_failed\",self,\"_connection_failed\")
+
+
+#Server
+func _player_connected(id):
+	status.text = \"Client connected %s\" % id
+	
+	var ids = get_tree().get_network_connected_peers()
+	if ids.size() > 1:
+		var ip1 = get_tree().network_peer.get_peer_address(ids[0])
+		var port1 = get_tree().network_peer.get_peer_port(ids[0])
+		var ip2 = get_tree().network_peer.get_peer_address(ids[1])
+		var port2 = get_tree().network_peer.get_peer_port(ids[1])
+		rpc_id(ids[0],\"connect_to\",ip2,port2,port1,true)
+		rpc_id(ids[1],\"connect_to\",ip1,port1,port2,false)
+
+
+#Host
+func _client_connected_to_host(id):
+	status.text = \"Client connected %s\" % id
+
+
+#Client
+func _connected_to_server():
+	status.text = \"Connected to server\"
+
+func _connection_failed():
+	status.text = \"Connection failed\"
+
+
+slave func connect_to(ip,port,my_port,is_host):
+	status.text = \"Connecting to %s : %s listening on port %s Is host: %s\" % [ip,port,my_port,is_host]
+	
+	#get_tree().network_peer.close_connection() #Disconnect from matchmaking server #Apparently redundant?
+	
+	#Send some packets to whitelist the incomming connection
+	if udp_handshake:
+		var udp = PacketPeerUDP.new()
+		udp.listen(my_port)
+		udp.set_dest_address(ip,port)
+		udp.put_packet(var2bytes(\"PAYLOAD\"))
+		udp.close()
+	
+	var net = NetworkedMultiplayerENet.new()
+	if is_host:
+		get_tree().connect(\"network_peer_connected\",self,\"_client_connected_to_host\")
+		net.create_server(my_port)
+	else:
+		net.create_client(ip,port,my_port)
+	get_tree().network_peer = net
+
+
+
+func _on_Handshake_toggled(button_pressed):
+	udp_handshake = button_pressed
+"
+_sections_unfolded = [ "Resource" ]
+
+[node name="Main" type="Control"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+mouse_filter = 0
+mouse_default_cursor_shape = 0
+size_flags_horizontal = 1
+size_flags_vertical = 1
+script = SubResource( 1 )
+
+[node name="IP" type="LineEdit" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_left = 4.0
+margin_top = 4.0
+margin_right = 260.0
+margin_bottom = 36.0
+rect_min_size = Vector2( 256, 32 )
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+focus_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 1
+size_flags_horizontal = 1
+size_flags_vertical = 1
+text = "IP"
+secret_character = "*"
+focus_mode = 2
+context_menu_enabled = true
+clear_button_enabled = false
+placeholder_alpha = 0.6
+caret_blink = false
+caret_blink_speed = 0.65
+caret_position = 0
+_sections_unfolded = [ "Rect" ]
+
+[node name="Handshake" type="CheckButton" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_left = 260.0
+margin_right = 410.0
+margin_bottom = 40.0
+rect_min_size = Vector2( 0, 32 )
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+focus_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 0
+size_flags_horizontal = 1
+size_flags_vertical = 1
+toggle_mode = true
+pressed = true
+enabled_focus_mode = 2
+shortcut = null
+group = null
+text = "Handshake"
+flat = false
+align = 0
+_sections_unfolded = [ "Rect" ]
+
+[node name="Port" type="LineEdit" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_left = 4.0
+margin_top = 40.0
+margin_right = 260.0
+margin_bottom = 72.0
+rect_min_size = Vector2( 256, 32 )
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+focus_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 1
+size_flags_horizontal = 1
+size_flags_vertical = 1
+text = "Port"
+secret_character = "*"
+focus_mode = 2
+context_menu_enabled = true
+clear_button_enabled = false
+placeholder_alpha = 0.6
+caret_blink = false
+caret_blink_speed = 0.65
+caret_position = 0
+_sections_unfolded = [ "Rect" ]
+
+[node name="Connect" type="Button" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_left = 4.0
+margin_top = 76.0
+margin_right = 260.0
+margin_bottom = 108.0
+rect_min_size = Vector2( 256, 32 )
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+focus_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 0
+size_flags_horizontal = 1
+size_flags_vertical = 1
+toggle_mode = false
+enabled_focus_mode = 2
+shortcut = null
+group = null
+text = "Connect"
+flat = false
+align = 1
+_sections_unfolded = [ "Rect" ]
+
+[node name="Status" type="Label" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_left = 4.0
+margin_top = 112.0
+margin_right = 260.0
+margin_bottom = 143.0
+rect_pivot_offset = Vector2( 0, 0 )
+rect_clip_content = false
+mouse_filter = 2
+mouse_default_cursor_shape = 0
+size_flags_horizontal = 1
+size_flags_vertical = 4
+text = "Status
+"
+valign = 1
+percent_visible = 1.0
+lines_skipped = 0
+max_lines_visible = -1
+_sections_unfolded = [ "Rect" ]
+
+[connection signal="toggled" from="Handshake" to="." method="_on_Handshake_toggled"]
+[connection signal="pressed" from="Connect" to="." method="_on_Connect_pressed"]
