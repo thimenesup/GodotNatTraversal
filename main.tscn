@@ -8,7 +8,7 @@ script/source = "extends Control
 
 onready var status : Label = $Status as Label
 
-var enable_server : bool = true
+var enable_server : bool = false
 
 var udp_handshake : bool = true
 
@@ -71,7 +71,7 @@ func _player_disconnected(id):
 func _connected_to_server():
 	status.text = \"Connected to server\"
 	var lan_ip = IP.get_local_addresses()
-	rpc_id(1,\"request_connection\")
+	rpc_id(1,\"request_connection\",lan_ip)
 
 func _connection_failed():
 	status.text = \"Connection failed\"
