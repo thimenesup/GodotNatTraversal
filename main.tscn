@@ -8,7 +8,7 @@ script/source = "extends Control
 
 onready var status : Label = $Status as Label
 
-var enable_server : bool = false
+var enable_server : bool = true
 
 var udp_handshake : bool = true
 
@@ -21,7 +21,12 @@ func _ready():
 		get_tree().network_peer = net
 		
 		get_tree().connect(\"network_peer_connected\",self,\"_player_connected\")
+		get_tree().connect(\"network_peer_disconnected\",self,\"_player_disconnected\")
 		$Connect.disabled = true
+
+
+func _on_Handshake_toggled(button_pressed):
+	udp_handshake = button_pressed
 
 func _on_Connect_pressed():
 	var server_ip = $IP.text
@@ -37,25 +42,36 @@ func _on_Connect_pressed():
 #Server
 func _player_connected(id):
 	status.text = \"Client connected %s\" % id
-	
+
+
+master func request_connection(lan_ip):
 	var ids = get_tree().get_network_connected_peers()
 	if ids.size() > 1:
 		var ip1 = get_tree().network_peer.get_peer_address(ids[0])
 		var port1 = get_tree().network_peer.get_peer_port(ids[0])
 		var ip2 = get_tree().network_peer.get_peer_address(ids[1])
 		var port2 = get_tree().network_peer.get_peer_port(ids[1])
+		
 		rpc_id(ids[0],\"connect_to\",ip2,port2,port1,true)
-		rpc_id(ids[1],\"connect_to\",ip1,port1,port2,false)
+		if ip1 == ip2: #Same IP address, connect peers by LAN
+			rpc_id(ids[1],\"lan_connect\",lan_ip,port1,port2)
+		else:
+			rpc_id(ids[1],\"connect_to\",ip1,port1,port2,false)
 
 
 #Host
 func _client_connected_to_host(id):
 	status.text = \"Client connected %s\" % id
 
+func _player_disconnected(id):
+	status.text = \"Client disconnected %s\" % id
+
 
 #Client
 func _connected_to_server():
 	status.text = \"Connected to server\"
+	var lan_ip = IP.get_local_addresses()
+	rpc_id(1,\"request_connection\")
 
 func _connection_failed():
 	status.text = \"Connection failed\"
@@ -83,9 +99,19 @@ slave func connect_to(ip,port,my_port,is_host):
 	get_tree().network_peer = net
 
 
+slave func lan_connect(lan_ip,port,my_port):
+	var net = NetworkedMultiplayerENet.new()
+	net.create_client(lan_ip,port,my_port)
+	get_tree().network_peer = net
 
-func _on_Handshake_toggled(button_pressed):
-	udp_handshake = button_pressed
+
+
+func get_ipv4_lan_ip():
+	var ips = IP.get_local_addresses()
+	for ip in ips:
+		if ip.begins_with(\"192\"):
+			return ip
+	return null
 "
 _sections_unfolded = [ "Resource" ]
 
@@ -173,7 +199,7 @@ mouse_filter = 0
 mouse_default_cursor_shape = 1
 size_flags_horizontal = 1
 size_flags_vertical = 1
-text = "Port"
+text = "5000"
 secret_character = "*"
 focus_mode = 2
 context_menu_enabled = true
