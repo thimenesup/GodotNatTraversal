@@ -6,11 +6,14 @@ resource_name = "main"
 script/source = "extends Control
 
 
-onready var status : Label = $Status as Label
+onready var status : RichTextLabel = $Status as RichTextLabel
 
 var enable_server : bool = true
 
 var udp_handshake : bool = true
+
+
+var server_connection : bool = true
 
 
 func _ready():
@@ -41,7 +44,10 @@ func _on_Connect_pressed():
 
 #Server
 func _player_connected(id):
-	status.text = \"Client connected %s\" % id
+	status.text += \"Client connected %s\\n\" % id
+
+func _player_disconnected(id):
+	status.text += \"Client disconnected %s\\n\" % id
 
 
 master func request_connection(lan_ip):
@@ -53,7 +59,7 @@ master func request_connection(lan_ip):
 		var port2 = get_tree().network_peer.get_peer_port(ids[1])
 		
 		rpc_id(ids[0],\"connect_to\",ip2,port2,port1,true)
-		if ip1 == ip2: #Same IP address, connect peers by LAN
+		if ip1 == ip2 and not ip1.begins_with(\"127\"): #Same IP address, connect peers by LAN #Ignore if its localhost
 			rpc_id(ids[1],\"lan_connect\",lan_ip,port1,port2)
 		else:
 			rpc_id(ids[1],\"connect_to\",ip1,port1,port2,false)
@@ -61,24 +67,26 @@ master func request_connection(lan_ip):
 
 #Host
 func _client_connected_to_host(id):
-	status.text = \"Client connected %s\" % id
-
-func _player_disconnected(id):
-	status.text = \"Client disconnected %s\" % id
+	status.text += \"Client connected %s\\n\" % id
 
 
 #Client
 func _connected_to_server():
-	status.text = \"Connected to server\"
-	var lan_ip = get_ipv4_lan_ip()
-	rpc_id(1,\"request_connection\",lan_ip)
+	if server_connection:
+		status.text += \"Connected to server\\n\"
+		var lan_ip = get_ipv4_lan_ip()
+		rpc_id(1,\"request_connection\",lan_ip)
+	else:
+		status.text += \"Connected to host\\n\"
 
 func _connection_failed():
-	status.text = \"Connection failed\"
+	status.text += \"Connection failed\\n\"
 
 
 slave func connect_to(ip,port,my_port,is_host):
-	status.text = \"Connecting to %s : %s listening on port %s Is host: %s\" % [ip,port,my_port,is_host]
+	server_connection = false
+	
+	status.text += \"Connecting to %s : %s listening on port %s Is host: %s\\n\" % [ip,port,my_port,is_host]
 	
 	#get_tree().network_peer.close_connection() #Disconnect from matchmaking server #Apparently redundant?
 	
@@ -95,23 +103,25 @@ slave func connect_to(ip,port,my_port,is_host):
 		get_tree().connect(\"network_peer_connected\",self,\"_client_connected_to_host\")
 		net.create_server(my_port)
 	else:
-		net.create_client(ip,port,my_port)
+		net.create_client(ip,port,0,0,my_port)
 	get_tree().network_peer = net
 
 
 slave func lan_connect(lan_ip,port,my_port):
+	server_connection = false
+	
 	var net = NetworkedMultiplayerENet.new()
-	net.create_client(lan_ip,port,my_port)
+	net.create_client(lan_ip,port,0,0,my_port)
 	get_tree().network_peer = net
 
 
 
-func get_ipv4_lan_ip():
+func get_ipv4_lan_ip() -> String:
 	var ips = IP.get_local_addresses()
 	for ip in ips:
 		if ip.begins_with(\"192\"):
 			return ip
-	return null
+	return \"\"
 "
 _sections_unfolded = [ "Resource" ]
 
@@ -145,16 +155,16 @@ mouse_filter = 0
 mouse_default_cursor_shape = 1
 size_flags_horizontal = 1
 size_flags_vertical = 1
-text = "IP"
 secret_character = "*"
 focus_mode = 2
 context_menu_enabled = true
 clear_button_enabled = false
+placeholder_text = "IP"
 placeholder_alpha = 0.6
 caret_blink = false
 caret_blink_speed = 0.65
 caret_position = 0
-_sections_unfolded = [ "Rect" ]
+_sections_unfolded = [ "Placeholder", "Rect" ]
 
 [node name="Handshake" type="CheckButton" parent="."]
 anchor_left = 0.0
@@ -204,11 +214,12 @@ secret_character = "*"
 focus_mode = 2
 context_menu_enabled = true
 clear_button_enabled = false
+placeholder_text = "Port"
 placeholder_alpha = 0.6
 caret_blink = false
 caret_blink_speed = 0.65
 caret_position = 0
-_sections_unfolded = [ "Rect" ]
+_sections_unfolded = [ "Placeholder", "Rect" ]
 
 [node name="Connect" type="Button" parent="."]
 anchor_left = 0.0
@@ -236,7 +247,7 @@ flat = false
 align = 1
 _sections_unfolded = [ "Rect" ]
 
-[node name="Status" type="Label" parent="."]
+[node name="Status" type="RichTextLabel" parent="."]
 anchor_left = 0.0
 anchor_top = 0.0
 anchor_right = 0.0
@@ -244,20 +255,25 @@ anchor_bottom = 0.0
 margin_left = 4.0
 margin_top = 112.0
 margin_right = 260.0
-margin_bottom = 143.0
+margin_bottom = 368.0
 rect_pivot_offset = Vector2( 0, 0 )
-rect_clip_content = false
-mouse_filter = 2
+rect_clip_content = true
+mouse_filter = 0
 mouse_default_cursor_shape = 0
 size_flags_horizontal = 1
-size_flags_vertical = 4
-text = "Status
-"
-valign = 1
+size_flags_vertical = 1
+bbcode_enabled = false
+bbcode_text = ""
+visible_characters = -1
 percent_visible = 1.0
-lines_skipped = 0
-max_lines_visible = -1
-_sections_unfolded = [ "Rect" ]
+meta_underlined = true
+tab_size = 4
+text = ""
+scroll_active = true
+scroll_following = true
+selection_enabled = false
+override_selected_font_color = false
+_sections_unfolded = [ "BBCode", "Rect", "custom_styles/normal" ]
 
 [connection signal="toggled" from="Handshake" to="." method="_on_Handshake_toggled"]
 [connection signal="pressed" from="Connect" to="." method="_on_Connect_pressed"]
