@@ -8,7 +8,7 @@ script/source = "extends Control
 
 onready var status : RichTextLabel = $Status as RichTextLabel
 
-var enable_server : bool = true
+var enable_server : bool = false
 
 var udp_handshake : bool = true
 
