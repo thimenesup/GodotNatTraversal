@@ -8,112 +8,49 @@ script/source = "extends Control
 
 onready var status : RichTextLabel = $Status as RichTextLabel
 
-var enable_server : bool = false
+var server : MatchmakingServer = preload(\"res://matchmaking_server.gd\").new()
 
-var udp_handshake : bool = true
+var enable_server : bool = true
+
+var enable_udp : bool = true
 
 
-var server_connection : bool = true
+var enable_host : bool = true
 
 
 func _ready():
+	yield(get_tree(),\"idle_frame\")
+	server.name = \"MatchmakingServer\"
+	get_tree().root.add_child(server)
+	
 	if enable_server:
-		var server_port = int($Port.text)
-		var net = NetworkedMultiplayerENet.new()
-		net.create_server(server_port,2048)
-		get_tree().network_peer = net
-		
-		get_tree().connect(\"network_peer_connected\",self,\"_player_connected\")
-		get_tree().connect(\"network_peer_disconnected\",self,\"_player_disconnected\")
 		$Connect.disabled = true
+		var port = int($Port.text)
+		server.setup_server(port,enable_udp)
 
-
-func _on_Handshake_toggled(button_pressed):
-	udp_handshake = button_pressed
 
 func _on_Connect_pressed():
-	var server_ip = $IP.text
-	var server_port = int($Port.text)
-	var net = NetworkedMultiplayerENet.new()
-	net.create_client(server_ip,server_port)
-	get_tree().network_peer = net
+	var ip = $IP.text
+	var port = int($Port.text)
+	server.connect_to_server(ip,port,enable_udp)
 	
-	get_tree().connect(\"connected_to_server\",self,\"_connected_to_server\")
-	get_tree().connect(\"connection_failed\",self,\"_connection_failed\")
-
-
-#Server
-func _player_connected(id):
-	status.text += \"Client connected %s\\n\" % id
-
-func _player_disconnected(id):
-	status.text += \"Client disconnected %s\\n\" % id
-
-
-master func request_connection(lan_ip):
-	var ids = get_tree().get_network_connected_peers()
-	if ids.size() > 1:
-		var ip1 = get_tree().network_peer.get_peer_address(ids[0])
-		var port1 = get_tree().network_peer.get_peer_port(ids[0])
-		var ip2 = get_tree().network_peer.get_peer_address(ids[1])
-		var port2 = get_tree().network_peer.get_peer_port(ids[1])
-		
-		rpc_id(ids[0],\"connect_to\",ip2,port2,port1,true)
-		if ip1 == ip2 and not ip1.begins_with(\"127\"): #Same IP address, connect peers by LAN #Ignore if its localhost
-			rpc_id(ids[1],\"lan_connect\",lan_ip,port1,port2)
-		else:
-			rpc_id(ids[1],\"connect_to\",ip1,port1,port2,false)
-
-
-#Host
-func _client_connected_to_host(id):
-	status.text += \"Client connected %s\\n\" % id
-
-
-#Client
-func _connected_to_server():
-	if server_connection:
-		status.text += \"Connected to server\\n\"
-		var lan_ip = get_ipv4_lan_ip()
-		rpc_id(1,\"request_connection\",lan_ip)
+	if enable_host:
+		print(\"Hosting\")
+		server.send_rpc(server.peers[0],\"create_match\",[get_ipv4_lan_ip()])
+		var net = NetworkedMultiplayerENet.new()
+		net.create_server(5050)
+		get_tree().network_peer = net
 	else:
-		status.text += \"Connected to host\\n\"
-
-func _connection_failed():
-	status.text += \"Connection failed\\n\"
-
-
-slave func connect_to(ip,port,my_port,is_host):
-	server_connection = false
-	
-	status.text += \"Connecting to %s : %s listening on port %s Is host: %s\\n\" % [ip,port,my_port,is_host]
-	
-	#get_tree().network_peer.close_connection() #Disconnect from matchmaking server #Apparently redundant?
-	
-	#Send some packets to whitelist the incomming connection
-	if udp_handshake:
-		var udp = PacketPeerUDP.new()
-		udp.listen(my_port)
-		udp.set_dest_address(ip,port)
-		udp.put_packet(var2bytes(\"PAYLOAD\"))
-		udp.close()
-	
-	var net = NetworkedMultiplayerENet.new()
-	if is_host:
-		get_tree().connect(\"network_peer_connected\",self,\"_client_connected_to_host\")
-		net.create_server(my_port)
-	else:
-		net.create_client(ip,port,0,0,my_port)
-	get_tree().network_peer = net
+		print(\"Clienting\")
+		server.send_rpc(server.peers[0],\"request_join\",[get_ipv4_lan_ip()])
+	get_tree().connect(\"network_peer_connected\",self,\"_network_peer_connected\")
 
 
-slave func lan_connect(lan_ip,port,my_port):
-	server_connection = false
-	
-	var net = NetworkedMultiplayerENet.new()
-	net.create_client(lan_ip,port,0,0,my_port)
-	get_tree().network_peer = net
+func _on_UDP_toggled(button_pressed):
+	enable_udp = button_pressed
 
+func _on_Host_toggled(button_pressed):
+	enable_host = button_pressed
 
 
 func get_ipv4_lan_ip() -> String:
@@ -122,6 +59,11 @@ func get_ipv4_lan_ip() -> String:
 		if ip.begins_with(\"192\"):
 			return ip
 	return \"\"
+
+
+
+func _network_peer_connected(id):
+	print(\"Peer connected %s\" % id)
 "
 _sections_unfolded = [ "Resource" ]
 
@@ -155,6 +97,7 @@ mouse_filter = 0
 mouse_default_cursor_shape = 1
 size_flags_horizontal = 1
 size_flags_vertical = 1
+text = "127.0.0.1"
 secret_character = "*"
 focus_mode = 2
 context_menu_enabled = true
@@ -166,13 +109,13 @@ caret_blink_speed = 0.65
 caret_position = 0
 _sections_unfolded = [ "Placeholder", "Rect" ]
 
-[node name="Handshake" type="CheckButton" parent="."]
+[node name="Host" type="CheckButton" parent="."]
 anchor_left = 0.0
 anchor_top = 0.0
 anchor_right = 0.0
 anchor_bottom = 0.0
 margin_left = 260.0
-margin_right = 410.0
+margin_right = 368.0
 margin_bottom = 40.0
 rect_min_size = Vector2( 0, 32 )
 rect_pivot_offset = Vector2( 0, 0 )
@@ -187,7 +130,7 @@ pressed = true
 enabled_focus_mode = 2
 shortcut = null
 group = null
-text = "Handshake"
+text = "Host"
 flat = false
 align = 0
 _sections_unfolded = [ "Rect" ]
@@ -275,5 +218,5 @@ selection_enabled = false
 override_selected_font_color = false
 _sections_unfolded = [ "BBCode", "Rect", "custom_styles/normal" ]
 
-[connection signal="toggled" from="Handshake" to="." method="_on_Handshake_toggled"]
+[connection signal="toggled" from="Host" to="." method="_on_Host_toggled"]
 [connection signal="pressed" from="Connect" to="." method="_on_Connect_pressed"]
