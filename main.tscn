@@ -10,7 +10,7 @@ onready var status : RichTextLabel = $Status as RichTextLabel
 
 var server : MatchmakingServer = preload(\"res://matchmaking_server.gd\").new()
 
-var enable_server : bool = true
+var enable_server : bool = false
 
 var enable_udp : bool = true
 
